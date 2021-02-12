@@ -15,7 +15,7 @@ The new files and folders are in bold; the others are existing ones in NotePlan'
 - Filters
 
 ## plugin.json
-The plugin is configured in this JSON file, which shouldn't change, for any given version of the plugin. Here's an annotated view of an example:
+The plugin is configured in this JSON file, which shouldn't change (for any given version of the plugin). Here's an annotated view of an example:
 
 ``` json
 {
@@ -55,7 +55,14 @@ The plugin is configured in this JSON file, which shouldn't change, for any give
   ]
 }
 ```
+### Passing command parameters
+In the first `command` string above, there is a `{FILENAME}`. This indicates that it is expecting a filename to be passed for the plugin to process. Compare the second command which doesn't need a particular note to be specified.  **Q for EM: This feels a bit of a hack, but I can't think of a more elegant solution right now.**
 
+Other possible parameter type identifiers:
+- `{STRING}` -- general string  **Q for EM: How to encapsulate the string to pass all sorts of characters safely? Base64?**
+- `{TITLE}` -- a note's title
+
+**Q for EM: Any others?**
 ## config.json
 The JSON file that stores the actual current Preference settings. This will be maintained by NotePlan. When a plugin is installed, it copies any `plugin.preference` item defaults into this file.
 
