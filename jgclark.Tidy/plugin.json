@@ -1,0 +1,52 @@
+{
+  "noteplan.minAppVersion": "3.0.0",
+  "plugin.id": "jgclark.Tidy",
+  "plugin.name": "Tidy up NotePlan notes",
+  "plugin.description": "Delete multiple blank lines, empty todos and bullets, etc.",
+  "plugin.icon": "",
+  "plugin.author": "Jonathan Clark",
+  "plugin.url": "tbd",
+  "plugin.version": "0.0.1",
+  "plugin.commands": [
+    {
+      "name": "tidy",
+      "description": "Tidy current note",
+      "command": "ruby npTidy.rb -n {FILENAME}",
+      "requested_shortcut": ""
+    },
+    {
+      "name": "tidy-recent",
+      "description": "Tidy all notes changed in last 8 hours (configure using 'hours_to_process' preference), unless the filename matches the 'exclude_glob' preference",
+      "command": "ruby npTidy.rb -a",
+      "requested_shortcut": "",
+      "requested_interval": "8h"
+    }
+  ],
+  "plugin.preferences": [
+    {
+      "name": "exclude_glob",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "name": "ignore_today",
+      "type": "boolean",
+      "default": "false"
+    },
+    {
+      "name": "hours_to_process",
+      "type": "integer",
+      "default": "8"
+    },
+    {
+      "name": "remove_scheduled",
+      "type": "boolean",
+      "default": "true"
+    },
+    {
+      "name": "tags_to_remove",
+      "type": "string",
+      "default": "'#waiting', '#high', '#started', '#⭐'"
+    }
+  ]
+}

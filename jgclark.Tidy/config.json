@@ -1,0 +1,7 @@
+{
+  "exclude_glob": "",
+  "hours_to_process": "8",
+  "ignore_today": "false",
+  "remove_scheduled": "true",
+  "tags_to_remove": "'#waiting', '#high', '#started', '#⭐'"
+}
