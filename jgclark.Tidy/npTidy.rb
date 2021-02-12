@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tidy Plugin
-# by Jonathan Clark, v0.0.1, 11.2.2021
+# by Jonathan Clark, v0.1.0, 11.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-Tidy/
 #-------------------------------------------------------------------------------
-VERSION = "0.0.1"
+VERSION = "0.1.0"
 
 require 'date'
 require 'time'
@@ -16,18 +16,26 @@ require 'cgi'
 # Setting variables to tweak ... TODO: reduce number here to about zero
 #-------------------------------------------------------------------------------
 $verbose = true
-NUM_HEADER_LINES = 4 # suits my use, but probably wants to be 1 for most people
+
+#-------------------------------------------------------------------------------
+# TODO: look these up from the environment, when NP supports this
+#-------------------------------------------------------------------------------
+BASE_DATA_DIR = "#{ENV['HOME']}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
+NP_NOTES_DIR = "#{BASE_DATA_DIR}/Notes".freeze
+NP_CALENDAR_DIR = "#{BASE_DATA_DIR}/Calendar".freeze
+puts BASE_DATA_DIR
+puts NP_NOTES_DIR
+puts NP_CALENDAR_DIR
 
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
 #-------------------------------------------------------------------------------
 JSON_SETTINGS_FILE = "config.json" # assumed to be in the current directory
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
-RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
 DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily note
-RE_YYYY_MM_DD = '\d{4}[\-\.//][01]?\d[\-\.//]\d{1,2}' # built-in format for finding dates of form YYYY-MM-DD and similar
 USERNAME = ENV['LOGNAME'] # pull username from environment
 USER_DIR = ENV['HOME'] # pull home directory from environment
+CURRENT_DIR = ENV['PWD'] # pull home directory from environment
 
 # Variables that need to be globally available
 time_now = Time.now
@@ -395,12 +403,12 @@ class NPFile
 end
 
 #=======================================================================================
-# Main logic
+# Main Program
 #=======================================================================================
 
-#TODO: 
-log_message("Starting npTidy v#{VERSION} for user #{USERNAME} at #{time_now_fmttd} in folder #{}")
+log_message("Starting npTidy v#{VERSION} for user #{USERNAME} at #{time_now_fmttd} in folder #{CURRENT_DIR}")
 
+#--------------------------------------------------------------------------------------
 # Setup program options, by reading from current 'config.json' file in this directory
 # Read JSON settings from a file
 options = {}
@@ -415,72 +423,22 @@ begin
   options[:remove_scheduled] = parsed['remove_scheduled'].exists? ? parsed['remove_scheduled'] : true
   options[:hours_to_process] = parsed['hours_to_process'].exists? ? parsed['hours'] : 8
   options[:tags_to_remove] = parsed['tags_to_remove'].exists? ? parsed['tags_to_remove'] : "'#waiting', '#high', '#started', '#⭐'"
-  log_message("Options: #{options.to_s}")
+  puts "Options: #{options.to_s}" if $verbose
 rescue JSON::ParserError => e
-  # FIXME: why doesn't this error fire when it can't find the file?
+  # TODO: check this fires OK
   error_message("Hit #{e.exception.message} when reading JSON settings file.")
   exit
 end
 
-# opt_parser = OptionParser.new do |opts|
-#   # options[:skipfile] = ''
-#   opts.on('-f', '--skipfile=TITLE[,TITLE2,etc]', Array, "Don't process specific file(s)") do |skipfile|
-#     options[:skipfile] = skipfile
-#   end
-# end
-# opt_parser.parse! # parse out options, leaving file patterns to process
-# options[:remove_scheduled] = options[:remove_scheduled]
-
 #--------------------------------------------------------------------------------------
-# Start by reading all Notes files in
-# (This is needed to have a list of all note titles that we might be moving tasks to.)
-begin
-  Dir.chdir(NP_NOTES_DIR)
-  Dir.glob(['{[!@]**/*,*}.txt', '{[!@]**/*,*}.md']).each do |this_file|
-    next if File.zero?(this_file) # ignore if this file is empty
+# Main logic
 
-    $allNotes << NPFile.new(this_file)
-  end
-rescue StandardError => e
-  puts "ERROR: #{e.exception.message} when reading in all notes files".colorize(WarningColour)
-end
-puts "Read in all Note files: #{$npfile_count} found\n" if $verbose > 0
-
-if ARGV.count.positive?
-  # We have a file pattern given, so find that (starting in the notes directory), and use it
-  puts "Starting npTools at #{time_now_fmttd} for files matching pattern(s) #{ARGV}." unless $quiet
-  begin
-    ARGV.each do |pattern|
-      # if pattern has a '.' in it assume it is a full filename ...
-      # ... otherwise treat as close to a regex term as possible with Dir.glob
-      glob_pattern = pattern =~ /\./ ? pattern : '[!@]**/*' + pattern + '*.{md,txt}'
-      puts "  Looking for note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
-      Dir.glob(glob_pattern).each do |this_file|
-        puts "  - #{this_file}" if $verbose > 0
-        # Note has already been read in; so now just find which one to point to, by matching filename
-        $allNotes.each do |this_note|
-          # copy the $allNotes item into $notes array
-          $notes << this_note if this_note.filename == this_file
-        end
-      end
-
-      # Now look for matches in Daily/Calendar files
-      Dir.chdir(NP_CALENDAR_DIR)
-      # if pattern has a '.' in it assume it is a full filename ...
-      # ... otherwise treat as close to a regex term as possible with Dir.glob
-      glob_pattern = pattern =~ /\./ ? pattern : '*' + pattern + '*.{md,txt}'
-      puts "  Looking for daily note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
-      Dir.glob(glob_pattern).each do |this_file|
-        puts "  - #{this_file}" if $verbose > 0
-        $notes << NPFile.new(this_file) if !File.zero?(this_file) # read in file unless this file is empty
-      end
-    end
-  rescue StandardError => e
-    puts "ERROR: #{e.exception.message} when reading in files matching pattern #{pattern}".colorize(WarningColour)
-  end
-
-else
-  # Read metadata for all Note files, and find those altered in the last 24 hours
+if ARGV.count.zero?
+  error_message("No arguments passed to plugin. Exiting.")
+  exit
+elsif ARGV.first == '-a'
+  # we want to tidy all files changed in last 'hours_to_process' hours
+    # Read metadata for all Note files, and find those altered in the last 24 hours
   puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{options[:hours_to_process]} hours." unless $quiet
   begin
     $allNotes.each do |this_note|
@@ -508,23 +466,82 @@ else
   rescue StandardError => e
     puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
   end
+  # TODO: unless we're been asked to ignore it
+
+elsif ARGV.first == '-n'
+  # we want to tidy the given single file
+  # unless we're been asked to ignore it
+  next if File.zero?(this_file) # ignore if this file is empty
+  $notes << NPFile.new(this_file)
+else
+  error_message("Invalid argument(s) passed '#{ARGV}'. Exiting.")
+  exit
 end
+
+
+# Start by reading all Notes files in
+# (This is needed to have a list of all note titles that we might be moving tasks to.)
+# begin
+#   Dir.chdir(NP_NOTES_DIR)
+#   Dir.glob(['{[!@]**/*,*}.txt', '{[!@]**/*,*}.md']).each do |this_file|
+#     next if File.zero?(this_file) # ignore if this file is empty
+#
+#     $allNotes << NPFile.new(this_file)
+#   end
+# rescue StandardError => e
+#   puts "ERROR: #{e.exception.message} when reading in all notes files".colorize(WarningColour)
+# end
+# puts "Read in all Note files: #{$npfile_count} found\n" if $verbose > 0
+
+# if ARGV.count.positive?
+#  # We have a file pattern given, so find that (starting in the notes directory), and use it
+#  puts "Starting npTools at #{time_now_fmttd} for files matching pattern(s) #{ARGV}." unless $quiet
+#  begin
+#    ARGV.each do |pattern|
+#      # if pattern has a '.' in it assume it is a full filename ...
+#      # ... otherwise treat as close to a regex term as possible with Dir.glob
+  #     glob_pattern = pattern =~ /\./ ? pattern : '[!@]**/*' + pattern + '*.{md,txt}'
+  #     puts "  Looking for note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
+  #     Dir.glob(glob_pattern).each do |this_file|
+  #       puts "  - #{this_file}" if $verbose > 0
+  #       # Note has already been read in; so now just find which one to point to, by matching filename
+  #       $allNotes.each do |this_note|
+  #         # copy the $allNotes item into $notes array
+  #         $notes << this_note if this_note.filename == this_file
+  #       end
+  #     end
+
+  #     # Now look for matches in Daily/Calendar files
+  #     Dir.chdir(NP_CALENDAR_DIR)
+  #     # if pattern has a '.' in it assume it is a full filename ...
+  #     # ... otherwise treat as close to a regex term as possible with Dir.glob
+  #     glob_pattern = pattern =~ /\./ ? pattern : '*' + pattern + '*.{md,txt}'
+  #     puts "  Looking for daily note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
+  #     Dir.glob(glob_pattern).each do |this_file|
+  #       puts "  - #{this_file}" if $verbose > 0
+  #       $notes << NPFile.new(this_file) if !File.zero?(this_file) # read in file unless this file is empty
+  #     end
+  #   end
+  # rescue StandardError => e
+  #   puts "ERROR: #{e.exception.message} when reading in files matching pattern #{pattern}".colorize(WarningColour)
+  # end
+
 
 #--------------------------------------------------------------------------------------
 if $notes.count.positive? # if we have some files to work on ...
-  puts "\nProcessing #{$notes.count} files:" if $verbose > 0
+  puts "\nProcessing #{$notes.count} files:" if $verbose
   # For each NP file to process, do the following:
   $notes.sort! { |a, b| a.title <=> b.title }
   $notes.each do |note|
     if note.is_today && options[:ignore_today]
-      puts '(Skipping ' + note.title.to_s.bold + ' due to --ignore_today option)' if $verbose > 0
+      puts "Skipping #{note.title.to_s} due to 'ignore_today' preference" if $verbose
       next
     end
-    if options[:skipfile].include? note.title
-      puts '(Skipping ' + note.title.to_s.bold + ' due to --skipfile option)' if $verbose > 0
+    if options[:ignore_file_regex].include? note.title
+      puts "Skipping #{note.title.to_s} due to 'ignore_file_regex' preference" if $verbose
       next
     end
-    puts " Processing file id #{note.id}: " + note.title.to_s.bold if $verbose > 0
+    puts " Processing file id #{note.id}: #{note.title.to_s}" if $verbose
     note.clear_empty_tasks_or_headers
     note.remove_empty_header_sections
     note.remove_unwanted_tags_dates
@@ -535,5 +552,5 @@ if $notes.count.positive? # if we have some files to work on ...
     note.rewrite_file if note.is_updated
   end
 else
-  puts "  Warning: No matching files found.\n".colorize(WarningColour)
+  log_message("No matching files found to tidy.")
 end

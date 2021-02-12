@@ -10,12 +10,12 @@ The new files and folders are in bold; the others are existing ones in NotePlan'
   - **Plugin name** -- one folder per plugin. The name is expected to the `plugin.id` below.
     - **`plugin.json`** -- metadata about the plugin, including default configuration
     - **`config.json`** -- current configuration for the plugin
-    - **`script_file`** -- the executable script file, in any suitable language, referred to in `config.json`
-    - other supporting files, libraries, graphics
+    - **`_script_file_`** -- the executable script file, in any suitable language, referred to in `config.json`
+    - **other supporting files, libraries, graphics**
 - Filters
 
 ## plugin.json
-The plugin is configured in this JSON file, which shouldn't change, for any given versino of the plugin. Here's an annotated view of an example:
+The plugin is configured in this JSON file, which shouldn't change, for any given version of the plugin. Here's an annotated view of an example:
 
 ``` json
 {
@@ -59,14 +59,28 @@ The plugin is configured in this JSON file, which shouldn't change, for any give
 ## config.json
 The JSON file that stores the actual current Preference settings. This will be maintained by NotePlan. When a plugin is installed, it copies any `plugin.preference` item defaults into this file.
 
+## Environment variables
+The following environment variables will be set, which the plugin can look up:
+1. `CALENDAR_DIR`, the full filepath of the 'Calendar' directory in the NotePlan data area.
+2. `NOTES_DIR`, the full filepath of the 'Notes' directory in the NotePlan data area.
+
+**Q for EM: Is it OK to do this please?**
+
+## Current Directory
+When the plugin is called it can assume its current working directory is in the plugin's folder.
+
+**Q for EM: This is the bit I'm least clear about. Does this even make sense? Is it possible?**
+
 ## Logging
 NotePlan maintains two log files, in the `~/Library/Containers/co.noteplan.NotePlan3/Data/Documents/` folder:
 - `np-out.log`
 - `np-error.log`
 
-When a script runs, by default the first of any output lines is treated as an error or log message.
-- `error: "message"` → modal dialog, debug window, np-error.log 
+When a script runs, by default the first of any output lines is treated as an error or log message, and will be copied to the relevant log, plus other output(s).
+- `error: "message"` → a modal error dialog, debug window, np-error.log 
 - `log: "message"` -→ debug window, np-out.log
+
+NB: Plugin authors should assume the log files aren't visible to the plugin. **Q for EM: Is this right?**
 
 ## Output
 Further lines of output are captured by NotePlan and used to insert at the current position, or replace the current selection (where there is one).

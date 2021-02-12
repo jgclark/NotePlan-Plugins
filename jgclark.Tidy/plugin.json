@@ -24,27 +24,32 @@
   ],
   "plugin.preferences": [
     {
-      "name": "exclude_glob",
+      "name": "ignore_file_regex",
+      "description": "A regular expression that identifies files to ignore when tidying",
       "type": "string",
       "default": ""
     },
     {
       "name": "ignore_today",
+      "description": "Don't tidy up today's daily note file",
       "type": "boolean",
       "default": "false"
     },
     {
       "name": "hours_to_process",
+      "description": "When running over all notes, include all notes changed within this number of hours before now",
       "type": "integer",
       "default": "8"
     },
     {
       "name": "remove_scheduled",
+      "description": "Remove the scheduled '>date' of completed tasks if present",
       "type": "boolean",
       "default": "true"
     },
     {
       "name": "tags_to_remove",
+      "description": "Tags to remove from completed tasks",
       "type": "string",
       "default": "'#waiting', '#high', '#started', '#⭐'"
     }
