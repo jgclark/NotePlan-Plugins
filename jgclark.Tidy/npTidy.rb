@@ -11,21 +11,24 @@ VERSION = "0.1.0"
 require 'date'
 require 'time'
 require 'cgi'
+require 'json'
 
 #-------------------------------------------------------------------------------
 # Setting variables to tweak ... TODO: reduce number here to about zero
 #-------------------------------------------------------------------------------
 $verbose = true
+read_only = true  # for testing, stop any actual re-writing of notes
 
 #-------------------------------------------------------------------------------
 # TODO: look these up from the environment, when NP supports this
 #-------------------------------------------------------------------------------
-BASE_DATA_DIR = "#{ENV['HOME']}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
+# BASE_DATA_DIR = "#{ENV['HOME']}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3"
+BASE_DATA_DIR = '/tmp'
 NP_NOTES_DIR = "#{BASE_DATA_DIR}/Notes".freeze
 NP_CALENDAR_DIR = "#{BASE_DATA_DIR}/Calendar".freeze
-puts BASE_DATA_DIR
-puts NP_NOTES_DIR
-puts NP_CALENDAR_DIR
+# puts BASE_DATA_DIR
+# puts NP_NOTES_DIR
+# puts NP_CALENDAR_DIR
 
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
@@ -51,11 +54,11 @@ $npfile_count = -1 # number of NPFile objects created so far (incremented before
 #-------------------------------------------------------------------------
 
 def log_message(message)
-  return "log: #{message}"
+  puts "log: #{message}"
 end
 
 def error_message(message)
-  return "error: #{message}"
+  puts "error: #{message}"
 end
 
 # def create_new_empty_file(title, ext)
@@ -151,7 +154,7 @@ class NPFile
       @is_today = false
     end
 
-    puts "Init NPFile #{@id} from #{this_file}, updated #{@modified_time} #{@line_count} #{@is_calendar}" if $verbose > 1
+    puts " Init NPFile #{@id} from #{this_file}" if $verbose
   end
 
   # def self.new2(*args)
@@ -165,7 +168,7 @@ class NPFile
 
   def clear_empty_tasks_or_headers
     # Clean up lines with just * or - or #s in them
-    puts '  remove_empty_tasks_or_headers ...' if $verbose > 1
+    # puts '  remove_empty_tasks_or_headers ...' if $verbose > 1
     n = cleaned = 0
     while n < @line_count
       # blank any lines which just have a * or -
@@ -184,12 +187,12 @@ class NPFile
 
     @is_updated = true
     @line_count = @lines.size
-    puts "  - removed #{cleaned} empty lines" if $verbose > 0
+    puts "  - removed #{cleaned} empty lines" if $verbose
   end
 
   def remove_unwanted_tags_dates
     # removes specific tags and >dates from complete or cancelled tasks
-    puts '  remove_unwanted_tags_dates ...' if $verbose > 1
+    # puts '  remove_unwanted_tags_dates ...' if $verbose
     n = cleaned = 0
     while n < @line_count
       # only do something if this is a completed or cancelled task
@@ -204,19 +207,21 @@ class NPFile
 
         # Remove any tags from the TagsToRemove list. Iterate over that array:
         options[:tags_to_remove].each do |tag|
-          if (@lines[n] =~ /#{tag}/[n].gsub!(/ #{tag}/, '')
+          if (@lines[n] =~ /#{tag}/)
+            @lines[n].gsub!(/ #{tag}/, '')
             cleaned += 1
           end
         end
       end
       n += 1
-    puts "  - removed #{cleaned} tags" if $verbose > 0
+    end
+    puts "  - removed #{cleaned} tags" if $verbose
   end
 
   def remove_scheduled
     # remove [>] tasks from calendar notes, as there will be a duplicate
     # (whether or not the 'Append links when scheduling' option is set or not)
-    puts '  remove_scheduled ...' if $verbose > 1
+    # puts '  remove_scheduled ...' if $verbose
     n = cleaned = 0
     while n < @line_count
       # Empty any [>] todo lines
@@ -231,12 +236,12 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
-    puts "  - removed #{cleaned} scheduled" if $verbose > 0
+    puts "  - removed #{cleaned} scheduled" if $verbose
   end
 
   def insert_new_line(new_line, line_number)
     # Insert 'line' into position 'line_number'
-    puts '  insert_new_line ...' if $verbose > 1
+    # puts '  insert_new_line ...' if $verbose > 1
     n = @line_count # start iterating from the end of the array
     while n >= line_number
       @lines[n + 1] = @lines[n]
@@ -246,22 +251,8 @@ class NPFile
     @line_count += 1
   end
 
-  def process_repeats_and_done
-  # TODO: remove repeats bit of this
-    # Process any completed (or cancelled) tasks with @repeat(..) tags,
-    # and also remove the HH:MM portion of any @done(...) tasks.
-    #
-    # When interval is of the form +2w it will duplicate the task for 2 weeks
-    # after the date is was completed.
-    # When interval is of the form 2w it will duplicate the task for 2 weeks
-    # after the date the task was last due. If this can't be determined,
-    # then default to the first option.
-    # Valid intervals are [0-9][bdwmqy].
-    # To work it relies on finding @done(YYYY-MM-DD HH:MM) tags that haven't yet been
-    # shortened to @done(YYYY-MM-DD).
-    # It includes cancelled tasks as well; to remove a repeat entirely, remoce
-    # the @repeat tag from the task in NotePlan.
-    puts '  process_repeats_and_done ...' if $verbose > 1
+  def remove_done_times
+    # Process any completed (or cancelled) tasks and remove the HH:MM portion of the @done(...).
     n = cleaned = 0
     outline = ''
     # Go through each line in the active part of the file
@@ -278,51 +269,88 @@ class NPFile
         @lines[n] = updated_line
         cleaned += 1
         @is_updated = true
-        if updated_line =~ /@repeat\(.*\)/
-          # get repeat to apply
-          date_interval_string = ''
-          updated_line.scan(/@repeat\((.*?)\)/) { |mm| date_interval_string = mm.join }
-          if date_interval_string[0] == '+'
-            # New repeat date = completed date + interval
-            date_interval_string = date_interval_string[1..date_interval_string.length]
-            new_repeat_date = calc_offset_date(Date.parse(completed_date), date_interval_string)
-            puts "      Adding from completed date --> #{new_repeat_date}" if $verbose > 1
-          else
-            # New repeat date = due date + interval
-            # look for the due date (<YYYY-MM-DD)
-            due_date = ''
-            if updated_line =~ /<\d{4}\-\d{2}\-\d{2}/
-              updated_line.scan(/<(\d{4}\-\d{2}\-\d{2})/) { |m| due_date = m.join }
-              # need to remove the old due date (and preceding whitespace)
-              updated_line = updated_line.gsub(/\s*<\d{4}\-\d{2}\-\d{2}/, '')
-            else
-              # but if there is no due date then treat that as today
-              due_date = completed_date
-            end
-            new_repeat_date = calc_offset_date(Date.parse(due_date), date_interval_string)
-            puts "      Adding from due date --> #{new_repeat_date}" if $verbose > 1
-          end
-
-          # Create new repeat line:
-          updated_line_without_done = updated_line.chomp
-          # Remove the @done text
-          updated_line_without_done = updated_line_without_done.gsub(/@done\(.*\)/, '')
-          # Replace the * [x] text with * [>]
-          updated_line_without_done = updated_line_without_done.gsub(/\[x\]/, '[>]')
-          outline = "#{updated_line_without_done} >#{new_repeat_date}"
-
-          # Insert this new line after current line
-          n += 1
-          insert_new_line(outline, n)
-        end
       end
       n += 1
     end
   end
 
+  # def process_repeats_and_done
+  # # TODO: remove repeats bit of this
+  #   # Process any completed (or cancelled) tasks with @repeat(..) tags,
+  #   # and also remove the HH:MM portion of any @done(...) tasks.
+  #   #
+  #   # When interval is of the form +2w it will duplicate the task for 2 weeks
+  #   # after the date is was completed.
+  #   # When interval is of the form 2w it will duplicate the task for 2 weeks
+  #   # after the date the task was last due. If this can't be determined,
+  #   # then default to the first option.
+  #   # Valid intervals are [0-9][bdwmqy].
+  #   # To work it relies on finding @done(YYYY-MM-DD HH:MM) tags that haven't yet been
+  #   # shortened to @done(YYYY-MM-DD).
+  #   # It includes cancelled tasks as well; to remove a repeat entirely, remoce
+  #   # the @repeat tag from the task in NotePlan.
+  #   puts '  process_repeats_and_done ...' if $verbose
+  #   n = cleaned = 0
+  #   outline = ''
+  #   # Go through each line in the active part of the file
+  #   while n < (@done_header != 0 ? @done_header : @line_count)
+  #     line = @lines[n]
+  #     updated_line = ''
+  #     completed_date = ''
+  #     # find lines with date-time to shorten, and capture date part of it
+  #     # i.e. @done(YYYY-MM-DD HH:MM[AM|PM])
+  #     if line =~ /@done\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/
+  #       # get completed date
+  #       line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}(?:.(?:AM|PM))?\)/) { |m| completed_date = m.join }
+  #       updated_line = line.gsub(/\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/, "(#{completed_date})")
+  #       @lines[n] = updated_line
+  #       cleaned += 1
+  #       @is_updated = true
+  #       if updated_line =~ /@repeat\(.*\)/
+  #         # get repeat to apply
+  #         date_interval_string = ''
+  #         updated_line.scan(/@repeat\((.*?)\)/) { |mm| date_interval_string = mm.join }
+  #         if date_interval_string[0] == '+'
+  #           # New repeat date = completed date + interval
+  #           date_interval_string = date_interval_string[1..date_interval_string.length]
+  #           new_repeat_date = calc_offset_date(Date.parse(completed_date), date_interval_string)
+  #           puts "      Adding from completed date --> #{new_repeat_date}" if $verbose
+  #         else
+  #           # New repeat date = due date + interval
+  #           # look for the due date (<YYYY-MM-DD)
+  #           due_date = ''
+  #           if updated_line =~ /<\d{4}\-\d{2}\-\d{2}/
+  #             updated_line.scan(/<(\d{4}\-\d{2}\-\d{2})/) { |m| due_date = m.join }
+  #             # need to remove the old due date (and preceding whitespace)
+  #             updated_line = updated_line.gsub(/\s*<\d{4}\-\d{2}\-\d{2}/, '')
+  #           else
+  #             # but if there is no due date then treat that as today
+  #             due_date = completed_date
+  #           end
+  #           new_repeat_date = calc_offset_date(Date.parse(due_date), date_interval_string)
+  #           puts "      Adding from due date --> #{new_repeat_date}" if $verbose
+  #         end
+
+  #         # Create new repeat line:
+  #         updated_line_without_done = updated_line.chomp
+  #         # Remove the @done text
+  #         updated_line_without_done = updated_line_without_done.gsub(/@done\(.*\)/, '')
+  #         # Replace the * [x] text with * [>]
+  #         updated_line_without_done = updated_line_without_done.gsub(/\[x\]/, '[>]')
+  #         outline = "#{updated_line_without_done} >#{new_repeat_date}"
+
+  #         # Insert this new line after current line
+  #         n += 1
+  #         insert_new_line(outline, n)
+  #       end
+  #     end
+  #     n += 1
+  #   end
+  # end
+
   def remove_empty_header_sections
     # go backwards through the active part of the note, deleting any sections without content
-    puts '  remove_empty_header_sections ...' if $verbose > 1
+    # puts '  remove_empty_header_sections ...' if $verbose
     cleaned = 0
     n = @done_header != 0 ? @done_header - 1 : @line_count - 1
 
@@ -334,11 +362,11 @@ class NPFile
       if line =~ /^#+\s\w/
         # this is a markdown header line; work out what level it is
         line.scan(/^(#+)\s/) { |m| this_header_level = m[0].length }
-        # puts "    - #{later_header_level} / #{this_header_level}" if $verbose > 1
+        # puts "    - #{later_header_level} / #{this_header_level}" if $verbose
         # if later header is same or higher level (fewer #s) as this,
         # then we can delete this line
         if later_header_level == this_header_level || at_eof == 1
-          puts "    - Removing empty header line #{n} '#{line.chomp}'" if $verbose > 1
+          puts "    - Removing empty header line #{n} '#{line.chomp}'" if $verbose
           @lines.delete_at(n)
           cleaned += 1
           @line_count -= 1
@@ -356,12 +384,12 @@ class NPFile
 
     @is_updated = true
     # @line_count = @lines.size
-    puts "  - removed #{cleaned} lines of empty section(s)" if $verbose > 1
+    puts "  - removed #{cleaned} lines of empty section(s)" if $verbose
   end
 
   def remove_multiple_empty_lines
     # go backwards through the active parts of the note, deleting any blanks at the end
-    puts '  remove_multiple_empty_lines ...' if $verbose > 1
+    # puts '  remove_multiple_empty_lines ...' if $verbose
     cleaned = 0
     n = (@done_header != 0 ? @done_header - 1 : @line_count - 1)
     last_was_empty = false
@@ -378,7 +406,7 @@ class NPFile
 
     @is_updated = true
     @line_count = @lines.size
-    puts "  - removed #{cleaned} empty lines" if $verbose > 1
+    puts "  - removed #{cleaned} empty lines" if $verbose
   end
 
   def rewrite_file
@@ -416,17 +444,21 @@ begin
   f = File.open(JSON_SETTINGS_FILE)
   json = f.read
   f.close
+rescue StandardError => e
+  error_message("Hit #{e.exception.message} when reading JSON settings file '${JSON_SETTINGS_FILE}'.")
+  exit
+end
+begin
   parsed = JSON.parse(json) # returns a hash
-  puts parsed if $verbose
-  options[:exclude_glob] = parsed['exclude_glob'].exists? ? parsed['exclude_glob'] : ''
-  options[:ignore_today] = parsed['ignore_today'].exists? ? parsed['ignore_today'] : false
-  options[:remove_scheduled] = parsed['remove_scheduled'].exists? ? parsed['remove_scheduled'] : true
-  options[:hours_to_process] = parsed['hours_to_process'].exists? ? parsed['hours'] : 8
-  options[:tags_to_remove] = parsed['tags_to_remove'].exists? ? parsed['tags_to_remove'] : "'#waiting', '#high', '#started', '#⭐'"
-  puts "Options: #{options.to_s}" if $verbose
+  # puts parsed if $verbose
+  options[:hours_to_process] = !parsed['hours_to_process'].nil? ? parsed['hours_to_process'].to_i : 8
+  options[:ignore_file_regex] = !parsed['ignore_file_regex'].nil? ? parsed['ignore_file_regex'] : ''
+  options[:ignore_today] = !parsed['ignore_today'].nil? ? parsed['ignore_today'] : false
+  options[:remove_scheduled] = !parsed['remove_scheduled'].nil? ? parsed['remove_scheduled'] : true
+  options[:tags_to_remove] = !parsed['tags_to_remove'].nil? ? parsed['tags_to_remove'] : "'#waiting', '#high', '#started', '#⭐'"
+  # puts "Options: #{options.to_s}" if $verbose
 rescue JSON::ParserError => e
-  # TODO: check this fires OK
-  error_message("Hit #{e.exception.message} when reading JSON settings file.")
+  error_message("Hit #{e.exception.message} when parsing JSON settings file.")
   exit
 end
 
@@ -437,27 +469,34 @@ if ARGV.count.zero?
   error_message("No arguments passed to plugin. Exiting.")
   exit
 elsif ARGV.first == '-a'
-  # we want to tidy all files changed in last 'hours_to_process' hours
-    # Read metadata for all Note files, and find those altered in the last 24 hours
-  puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{options[:hours_to_process]} hours." unless $quiet
+  # Tidy all files changed in last 'hours_to_process' hours
+  # Read metadata for all Note files, and find those altered in the last 'hours_to_process' hours
   begin
-    $allNotes.each do |this_note|
-      next unless this_note.modified_time > (time_now - options[:hours_to_process] * 60 * 60)
-
-      # Note has already been read in; so now just find which one to point to
-      $notes << this_note
+    Dir.chdir(NP_NOTES_DIR)
+    Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
+      puts "  - found #{this_file}" if $verbose
+      # ignore if this file not changed in the last 'hours_to_process' hours
+      modified_time = File.exist?(filename) ? File.mtime(this_file) : 0
+      next unless modified_time > (time_now - options[:hours_to_process] * 60 * 60)
+      # ignore if this file is empty
+      next if File.zero?(this_file)
+      # ignore if this file matches 'ignore_file_regex'
+      !options[:ignore_file_regex].empty? && this_file =~ /options[:ignore_file_regex]/
+      # OK, we want to read in this file
+      $notes << NPFile.new(this_file)
     end
   rescue StandardError => e
-    puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
+    error_message("#{e.exception.message} when finding recently changed files")
   end
 
-  # Also read metadata for all Daily files, and find those altered in the last 24 hours
+  # Also read metadata for all Daily files, and find those altered in the last 'hours_to_process' hours
   begin
     Dir.chdir(NP_CALENDAR_DIR)
     Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
-      puts "    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}" if $verbose > 1
-      next if File.zero?(this_file) # ignore if this file is empty
-      # if modified time (mtime) in the last 24 hours
+      puts "    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}" if $verbose
+      # ignore if this file is empty
+      next if File.zero?(this_file)
+      # ignore if modified time (mtime) not in the last 'hours_to_process' hours
       next unless File.mtime(this_file) > (time_now - options[:hours_to_process] * 60 * 60)
 
       # read the calendar file in
@@ -469,15 +508,27 @@ elsif ARGV.first == '-a'
   # TODO: unless we're been asked to ignore it
 
 elsif ARGV.first == '-n'
-  # we want to tidy the given single file
-  # unless we're been asked to ignore it
-  next if File.zero?(this_file) # ignore if this file is empty
+  # we want to tidy the given single file, passed in ARGV[1]
+  this_file = ARGV[1]
+  # unless it doesn't exist
+  if !File.exist?(this_file)
+    error_message("File '#{this_file} doesn't exist'. Exiting.")
+    exit
+  end
+  # or we're been asked to ignore it
+  if !options[:ignore_file_regex].empty? && this_file =~ /options[:ignore_file_regex]/
+    log_message("Ignoring '#{this_file} as it matches 'ignore_file_regex'.")
+  end
+  # or the note is empty
+  if File.zero?(this_file)
+    log_message("Ignoring '#{this_file} as it is empty.")
+  end
+  # OK, let's read it in
   $notes << NPFile.new(this_file)
 else
   error_message("Invalid argument(s) passed '#{ARGV}'. Exiting.")
   exit
 end
-
 
 # Start by reading all Notes files in
 # (This is needed to have a list of all note titles that we might be moving tasks to.)
@@ -529,28 +580,23 @@ end
 
 #--------------------------------------------------------------------------------------
 if $notes.count.positive? # if we have some files to work on ...
+  c = 0
   puts "\nProcessing #{$notes.count} files:" if $verbose
-  # For each NP file to process, do the following:
   $notes.sort! { |a, b| a.title <=> b.title }
   $notes.each do |note|
-    if note.is_today && options[:ignore_today]
-      puts "Skipping #{note.title.to_s} due to 'ignore_today' preference" if $verbose
-      next
-    end
-    if options[:ignore_file_regex].include? note.title
-      puts "Skipping #{note.title.to_s} due to 'ignore_file_regex' preference" if $verbose
-      next
-    end
+    # For each NP file to process, do the following
     puts " Processing file id #{note.id}: #{note.title.to_s}" if $verbose
     note.clear_empty_tasks_or_headers
     note.remove_empty_header_sections
     note.remove_unwanted_tags_dates
     note.remove_scheduled if note.is_calendar
-    note.process_repeats_and_done
+    note.remove_done_times   # simpler form of note.process_repeats_and_done
     note.remove_multiple_empty_lines
     # If there have been changes, write out the file
-    note.rewrite_file if note.is_updated
+    note.rewrite_file if note.is_updated && !read_only
+    c += 1
   end
+  log_message("Processed #{c} note(s). Stopping.")
 else
   log_message("No matching files found to tidy.")
 end

@@ -62,19 +62,19 @@ Other possible parameter type identifiers:
 - `{STRING}` -- general string  **Q for EM: How to encapsulate the string to pass all sorts of characters safely? Base64?**
 - `{TITLE}` -- a note's title
 
-**Q for EM: Any others?**
-## config.json
-The JSON file that stores the actual current Preference settings. This will be maintained by NotePlan. When a plugin is installed, it copies any `plugin.preference` item defaults into this file.
+**Q for EM: Any others? I think we'll might also need a way to pass an array of filenames.**
 
-## Environment variables
-The following environment variables will be set, which the plugin can look up:
+## config.json
+This is the JSON file that stores the actual current Preference settings. This will be maintained by NotePlan. When a plugin is installed, it copies any `plugin.preference` item defaults into this file.
+
+## Referencing Files
+The following **environment variables** will be set, which the plugin can look up:
 1. `CALENDAR_DIR`, the full filepath of the 'Calendar' directory in the NotePlan data area.
 2. `NOTES_DIR`, the full filepath of the 'Notes' directory in the NotePlan data area.
 
-**Q for EM: Is it OK to do this please?**
+**Q for EM: Is it OK to do this?**
 
-## Current Directory
-When the plugin is called it can assume its current working directory is in the plugin's folder.
+When the plugin is called it can assume its **current working directory** is in the plugin's folder.
 
 **Q for EM: This is the bit I'm least clear about. Does this even make sense? Is it possible?**
 
@@ -84,8 +84,8 @@ NotePlan maintains two log files, in the `~/Library/Containers/co.noteplan.NoteP
 - `np-error.log`
 
 When a script runs, by default the first of any output lines is treated as an error or log message, and will be copied to the relevant log, plus other output(s).
-- `error: "message"` → a modal error dialog, debug window, np-error.log 
-- `log: "message"` -→ debug window, np-out.log
+- `error: "message"` --> a modal error dialog, debug window, np-error.log 
+- `log: "message"` --> debug window, np-out.log
 
 NB: Plugin authors should assume the log files aren't visible to the plugin. **Q for EM: Is this right?**
 
