@@ -24,6 +24,7 @@ read_only = true  # for testing, stop any actual re-writing of notes
 #-------------------------------------------------------------------------------
 # BASE_DATA_DIR = "#{ENV['HOME']}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3"
 BASE_DATA_DIR = '/tmp'
+PLUGIN_DIR = '/Users/jonathan/GitHub/NotePlan-Plugins/jgclark.Tidy'
 NP_NOTES_DIR = "#{BASE_DATA_DIR}/Notes".freeze
 NP_CALENDAR_DIR = "#{BASE_DATA_DIR}/Calendar".freeze
 # puts BASE_DATA_DIR
@@ -274,80 +275,6 @@ class NPFile
     end
   end
 
-  # def process_repeats_and_done
-  # # TODO: remove repeats bit of this
-  #   # Process any completed (or cancelled) tasks with @repeat(..) tags,
-  #   # and also remove the HH:MM portion of any @done(...) tasks.
-  #   #
-  #   # When interval is of the form +2w it will duplicate the task for 2 weeks
-  #   # after the date is was completed.
-  #   # When interval is of the form 2w it will duplicate the task for 2 weeks
-  #   # after the date the task was last due. If this can't be determined,
-  #   # then default to the first option.
-  #   # Valid intervals are [0-9][bdwmqy].
-  #   # To work it relies on finding @done(YYYY-MM-DD HH:MM) tags that haven't yet been
-  #   # shortened to @done(YYYY-MM-DD).
-  #   # It includes cancelled tasks as well; to remove a repeat entirely, remoce
-  #   # the @repeat tag from the task in NotePlan.
-  #   puts '  process_repeats_and_done ...' if $verbose
-  #   n = cleaned = 0
-  #   outline = ''
-  #   # Go through each line in the active part of the file
-  #   while n < (@done_header != 0 ? @done_header : @line_count)
-  #     line = @lines[n]
-  #     updated_line = ''
-  #     completed_date = ''
-  #     # find lines with date-time to shorten, and capture date part of it
-  #     # i.e. @done(YYYY-MM-DD HH:MM[AM|PM])
-  #     if line =~ /@done\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/
-  #       # get completed date
-  #       line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}(?:.(?:AM|PM))?\)/) { |m| completed_date = m.join }
-  #       updated_line = line.gsub(/\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/, "(#{completed_date})")
-  #       @lines[n] = updated_line
-  #       cleaned += 1
-  #       @is_updated = true
-  #       if updated_line =~ /@repeat\(.*\)/
-  #         # get repeat to apply
-  #         date_interval_string = ''
-  #         updated_line.scan(/@repeat\((.*?)\)/) { |mm| date_interval_string = mm.join }
-  #         if date_interval_string[0] == '+'
-  #           # New repeat date = completed date + interval
-  #           date_interval_string = date_interval_string[1..date_interval_string.length]
-  #           new_repeat_date = calc_offset_date(Date.parse(completed_date), date_interval_string)
-  #           puts "      Adding from completed date --> #{new_repeat_date}" if $verbose
-  #         else
-  #           # New repeat date = due date + interval
-  #           # look for the due date (<YYYY-MM-DD)
-  #           due_date = ''
-  #           if updated_line =~ /<\d{4}\-\d{2}\-\d{2}/
-  #             updated_line.scan(/<(\d{4}\-\d{2}\-\d{2})/) { |m| due_date = m.join }
-  #             # need to remove the old due date (and preceding whitespace)
-  #             updated_line = updated_line.gsub(/\s*<\d{4}\-\d{2}\-\d{2}/, '')
-  #           else
-  #             # but if there is no due date then treat that as today
-  #             due_date = completed_date
-  #           end
-  #           new_repeat_date = calc_offset_date(Date.parse(due_date), date_interval_string)
-  #           puts "      Adding from due date --> #{new_repeat_date}" if $verbose
-  #         end
-
-  #         # Create new repeat line:
-  #         updated_line_without_done = updated_line.chomp
-  #         # Remove the @done text
-  #         updated_line_without_done = updated_line_without_done.gsub(/@done\(.*\)/, '')
-  #         # Replace the * [x] text with * [>]
-  #         updated_line_without_done = updated_line_without_done.gsub(/\[x\]/, '[>]')
-  #         outline = "#{updated_line_without_done} >#{new_repeat_date}"
-
-  #         # Insert this new line after current line
-  #         n += 1
-  #         insert_new_line(outline, n)
-  #       end
-  #     end
-  #     n += 1
-  #   end
-  # end
-
   def remove_empty_header_sections
     # go backwards through the active part of the note, deleting any sections without content
     # puts '  remove_empty_header_sections ...' if $verbose
@@ -472,6 +399,7 @@ elsif ARGV.first == '-a'
   # Tidy all files changed in last 'hours_to_process' hours
   # Read metadata for all Note files, and find those altered in the last 'hours_to_process' hours
   begin
+    # FIXME: make fake dailies test data
     Dir.chdir(NP_NOTES_DIR)
     Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
       puts "  - found #{this_file}" if $verbose
@@ -509,10 +437,10 @@ elsif ARGV.first == '-a'
 
 elsif ARGV.first == '-n'
   # we want to tidy the given single file, passed in ARGV[1]
-  this_file = ARGV[1]
+  this_file = ARGV[1].nil? ? '' : ARGV[1]
   # unless it doesn't exist
   if !File.exist?(this_file)
-    error_message("File '#{this_file} doesn't exist'. Exiting.")
+    error_message("File '#{this_file}' doesn't exist. Exiting.")
     exit
   end
   # or we're been asked to ignore it

@@ -1,6 +1,13 @@
 # Plugin Architecture
 A work in progress by Eduard Metzger and Jonathan Clark, with support from the discord server community.
 
+## Triggering plugins
+There are potentially four ways plugin functionality can be triggered:
+1. By a `/command` typed at the start of a line in editor mode.
+2. By a command typed in the command bar (which can be triggered anywhere by ⌥⌘J)
+3. (Potentially) by a shortcut registered by the plugin
+4. (Potentially) on a regular timer
+
 ## File/Folder structure
 The new files and folders are in bold; the others are existing ones in NotePlan's data directory.
 
@@ -71,6 +78,7 @@ This is the JSON file that stores the actual current Preference settings. This w
 The following **environment variables** will be set, which the plugin can look up:
 1. `CALENDAR_DIR`, the full filepath of the 'Calendar' directory in the NotePlan data area.
 2. `NOTES_DIR`, the full filepath of the 'Notes' directory in the NotePlan data area.
+3. `PLUGIN_DIR`, the full filepath of the current Plugin's top-level folder.
 
 **Q for EM: Is it OK to do this?**
 

@@ -17,17 +17,17 @@ cd $PLUGIN_DIR
 # cp test_dailies/*.* $CALENDAR_DIR
 
 # Test 1: should fail with no arguments
-# PASSED npTidy
+# PASSED: npTidy
 
 # Test 2: should fail with wrong number of args
-npTidy -n
-exit  # ----------------------------
+# PASSED: npTidy -n
 
 # Test 3: should find a single note file
-npTidy -n "ZZZZ.XXX"
+# PASSED: npTidy -n "ZZZZ.XXX"
 
 # Test 4: should find a single note file
 npTidy -n "TEST various.md"
+exit  # ----------------------------
 
 # Test 5: should find a single calendar file
 npTidy -n "20210123.md"
