@@ -1,4 +1,4 @@
-# Plugin Architecture
+# NotePlan Plugin Architecture
 A work in progress by Eduard Metzger and Jonathan Clark, with support from the discord server community.
 
 ## Triggering plugins
@@ -99,3 +99,9 @@ NB: Plugin authors should assume the log files aren't visible to the plugin. **Q
 
 ## Output
 Further lines of output are captured by NotePlan and used to insert at the current position, or replace the current selection (where there is one).
+
+----
+
+## Future Work 
+1. (**priority**) need way for plugin to access a list of some/all note titles without having to read in all files
+2. how to trigger UI elements or dialogs in NotePlan itself?
