@@ -69,7 +69,7 @@ The plugin is configured in this JSON file, which shouldn't change (for any give
     {
       "name": "hours_to_process",
       "type": "integer",
-      "default": "8"
+      "default": 8
     }
   ]
 }
@@ -78,10 +78,12 @@ The plugin is configured in this JSON file, which shouldn't change (for any give
 In the first `command` string above, there is a `{FILENAME}`. This indicates that it is expecting a filename to be passed for the plugin to process. Compare the second command which doesn't need a particular note to be specified.  **Q for EM: This feels a bit of a hack, but I can't think of a more elegant solution right now.**
 
 Other possible parameter type identifiers:
-- `{STRING}` -- general string  **Q for EM: How to encapsulate the string to pass all sorts of characters safely? Base64?**
+- `{STRING}` -- general string
 - `{TITLE}` -- a note's title
 
-**Q for EM: Any others? I think we'll might also need a way to pass an array of filenames.**
+**Q for EM: Any others? I think we'll also need a way to pass an array of filenames.**
+
+All are passed as an UTF-8 string with any double-quote marks escaped.
 
 ## config.json
 This is the JSON file that stores the actual current Preference settings. This will be maintained by NotePlan. When a plugin is installed, it copies any `plugin.preference` item defaults into this file.
@@ -91,8 +93,6 @@ The following **environment variables** will be set, which the plugin can look u
 1. `CALENDAR_DIR`, the full filepath of the 'Calendar' directory in the NotePlan data area.
 2. `NOTES_DIR`, the full filepath of the 'Notes' directory in the NotePlan data area.
 3. `PLUGIN_DIR`, the full filepath of the current Plugin's top-level folder.
-
-**Q for EM: Is it OK to do this?**
 
 When the plugin is called it can assume its **current working directory** is in the plugin's folder.
 
@@ -112,16 +112,15 @@ NB: Plugin authors should assume the log files aren't visible to the plugin. **Q
 ## Output
 Further lines of output are captured by NotePlan and used to insert at the current position, or replace the current selection (where there is one).
 
+## Installing
+We need a mechanism to enable/disable plugins (common practice in other extensible systems).  Not least because I can easily foresee the case that a less experienced user tries a plugin that requires script language X version Y, but doesn't have it on their Mac. (Particularly as I think I read that Apple have said they're going to stop shipping some language engines in macOS.)  So I think (in time, anyway) we need a way to test whether language X version Y is installed, to warn the user, and to disable it if it isn't.
+
+We also need an array of dependencies, now added in the sample above. This includes an (optional?) one-line script that the author specifies to test whether the dependency is met or not. If the command executes OK then dependency is passed. If not, an error is generated.
+
 ----
 
 ## Future Work 
 1. (**priority**) need way for plugin to access a list of some/all note titles without having to read in all files
-2. installation issues (below)
+2. installation issues
 3. how to trigger UI elements or dialogs in NotePlan itself?
 
-## Installing
-I think we need a mechanism to enable/disable plugins (common practice in other extensible systems).  Not least because I can easily foresee the case that a less experienced user tries a plugin that requires script language X version Y, but doesn't have it on their Mac. (Particularly as I think I read that Apple have said they're going to stop shipping some language engines in macOS.)  So I think (in time, anyway) we need a way to test whether language X version Y is installed, to warn the user, and to disable it if it isn't.
-
-Perhaps well as some sort of array of dependencies, we could say either:
-1. each needs a one-line script that the author specifies to test whether the dependency is met or not. If the command executes OK then dependency is passed. If not, an error is generated.
-2. a special command line option is passed to the script 

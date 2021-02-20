@@ -4,7 +4,7 @@ Aim: leave this line alone
 
 ----
 ### Other types of task line markers
-- [x] item 1 to complete and keep scheduling info @done(2020-08-01)
+- [x] item 1 to complete and keep scheduling info @done(2020-08-01 12:34)
 - [-] item 2 to cancel and keep scheduling info
 - [x] open item @done(2021-01-08)
 - task
@@ -21,20 +21,18 @@ Aim: leave this line alone
 * [>] test for delayed and overdue task >2020-07-04
 
 ### Testing tag removal
-* [x] TEST todo done 1 #waiting @done(2020-09-07)
-* [x] TEST todo done 2 #high @done(2020-09-07)
-* [x] TEST todo done 3 #waiting #high  @done(2020-09-07)
+* [x] TEST todo done 1 #waiting
+* [x] TEST todo done 2 #high high thing
+* [x] TEST todo done 3 #waiting #high and more text
 
-### Testing done-check-off 
-* [x] TEST todo without square brackets 1 #ztest @done(2020-09-07)
-	* [x] TEST todo without square brackets 2 #ztest @done(2020-09-07)
-* [x] TEST todo with square brackets 1 #ztest @done(2020-09-07)
-	* [x] TEST todo with square brackets 2 #ztest @done(2020-09-07)
+### Testing inbound date removal
+* [x] TEST todo done <2020-09-07 with text
+	* [x] TEST todo <2021-01-01
 
 ### Done AMPM testing
-* [x] test 1 @done(2021-02-19 00:06)
+* [x] test 1 @done(2021-02-19 01:06PM)
 * [x] test 2 @done(2020-08-03)
-* [x] test 3 @done(2021-02-19 00:06)
+* [x] test 3 @done(2021-02-19 02:06AM)
 
 
 

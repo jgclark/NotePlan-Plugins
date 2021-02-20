@@ -13,20 +13,31 @@ When invoked for a note it **tidies up** data files, by:
 ## Installation
 Eventually to be handled by NotePlan.
 
-But for now, in NotePlan in Preferences > Sync > Advanced, click on 'Open Local Database Folder', and see if there's an existing `Plugins` directory. If not create it. Then copy the whole `Tidy` folder (not just the contents) to this directory.
+But for now, in NotePlan in Preferences > Sync > Advanced, click on 'Open Local Database Folder', and see if there's an existing `Plugins` directory. If not create it. Then copy the whole `jgclark.Tidy` folder (not just the contents) to this directory.
 
 ## Configuration
-In time there will be a configuration system through the `plugin.json` file. But for now, update the relevant variables at the top of the `npTidy.rb` script.
+Configuration is done through the `plugin.json` file, as documented in the `config.json` definition file.
 
-- `-s` (`--keepschedules`) keep the scheduled (>) dates of completed tasks
-- `TAGS_TO_REMOVE`: list of tags to remove. Default ["#waiting","#high"]
+Also note that for development purposes, there are variables at the top of the script that can be set:
+- `read_only`: if set to true, it stops the script from actually writing any changes.
+- `$verbose`: if set to true, then it adds more logging output
+
+## Testing the plugin
+Use the `tidyTest.sh` script -- see comments embedded in it to set up some test data in some suitable place, or point it to the real NP3 data. It calls a series of commands to test out the plugin -- but the output has to be manually checked, until I work out how to automate this.
 
 ## Running the Plugin
-Invoke the **tidy** command on the current note, by ??
+To invoke the **tidy** command on the current note, by calling
+
+`npTidy -n `
+
+To invoke the **tidy** command on all files changed in the last `hours_to_process` hours, call
+
+`npTidy -a`
 
 **NB**: NotePlan has several options in the Markdown settings for how to mark a task, including `-`, `- [ ]', `*` and `* [ ]`. All are supported by this script.
 
 ## Future things to think about
+- check > and < date moving
 - Automatic running -- e.g. Tidy all files altered in last 24 hours
 
 ## Problems? Suggestions?

@@ -45,19 +45,19 @@
       "name": "ignore_today",
       "description": "Don't tidy up today's daily note file",
       "type": "boolean",
-      "default": "false"
+      "default": false
     },
     {
       "name": "hours_to_process",
       "description": "When running over all notes, include all notes changed within this number of hours before now",
       "type": "integer",
-      "default": "8"
+      "default": 8
     },
     {
       "name": "remove_scheduled",
       "description": "Remove the scheduled '>date' of completed tasks if present",
       "type": "boolean",
-      "default": "true"
+      "default": true
     },
     {
       "name": "tags_to_remove",

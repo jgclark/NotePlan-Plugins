@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tidy Plugin
-# by Jonathan Clark, v0.1.2, 20.2.2021
+# by Jonathan Clark, v0.1.3, 20.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-Tidy/
 #-------------------------------------------------------------------------------
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 
 require 'date'
 require 'time'
@@ -17,7 +17,7 @@ require 'csv'
 #-------------------------------------------------------------------------------
 # Setting variables to tweak ... TODO: reduce number here to about zero
 #-------------------------------------------------------------------------------
-$verbose = true
+$verbose = false
 read_only = false  # for testing, stop any actual re-writing of notes
 
 #-------------------------------------------------------------------------------
@@ -46,7 +46,7 @@ $date_today = time_now.strftime(DATE_TODAY_FORMAT)
 # $archive = 0
 # $allNotes = []  # to hold all note objects
 $notes    = []  # to hold all relevant note objects
-$npfile_count = -1 # number of NPFile objects created so far (incremented before first use)
+$npfile_count = 0 # number of NPFile objects created so far (incremented before first use)
 $options = {} # to hold settings/options
 $tags_to_remove = []
 
@@ -62,41 +62,9 @@ def error_message(message)
   puts "error: #{message}"
 end
 
-# def create_new_empty_file(title, ext)
-#   # Populate empty NPFile object, adding just title
-
-#   # Use x-callback scheme to add a new note in NotePlan,
-#   # as defined at http://noteplan.co/faq/General/X-Callback-Url%20Scheme/
-#   #   noteplan://x-callback-url/addNote?text=New%20Note&openNote=no
-#   # Open a note identified by the title or date.
-#   # Parameters:
-#   # - noteTitle optional, will be prepended if it is used
-#   # - text optional, text will be added to the note
-#   # - openNote optional, values: yes (opens the note, if not already selected), no
-#   # - subWindow optional (only Mac), values: yes (opens note in a subwindow) and no
-#   # NOTE: So far this can only create notes in the top-level Notes folder
-#   # Does cope with emojis in titles.
-#   uriEncoded = "noteplan://x-callback-url/addNote?noteTitle=" + URI.escape(title) + "&openNote=no"
-#   begin
-#     response = `open "#{uriEncoded}"` # TODO: try simpler open(...) with no response, and rescue errors
-#   rescue StandardError => e
-#     puts "    Error #{e.exception.message} trying to add note with #{uriEncoded}. Exiting.".colorize(WarningColour)
-#     exit
-#   end
-
-#   # Now read this new file into the $allNotes array
-#   Dir.chdir(NP_NOTES_DIR)
-#   sleep(3) # wait for the file to become available. TODO: probably a smarter way to do this
-#   filename = "#{title}.#{ext}"
-#   new_note = NPFile.new(filename)
-#   new_note_id = new_note.id
-#   $allNotes[new_note_id] = new_note
-#   puts "Added new note id #{new_note_id} with title '#{title}' and filename '#{filename}'. New $allNotes count = #{$allNotes.count}" if $verbose > 1
-# end
-
 #-------------------------------------------------------------------------
 # Class definition: NPFile
-# NB: in this script this class covers Note *and* Daily files
+# NB: in this script this class covers Note *and* Daily Calendar files
 #-------------------------------------------------------------------------
 class NPFile
   # Define the attributes that need to be visible outside the class instances
@@ -114,8 +82,7 @@ class NPFile
     # Create NPFile object from reading 'this_file' file
 
     # Set variables that are visible outside the class instance
-    $npfile_count += 1
-    @id = $npfile_count
+    @id = $npfile_count + 1
     @filename = this_file
     @modified_time = File.exist?(filename) ? File.mtime(this_file) : 0
     @title = ''
@@ -132,19 +99,23 @@ class NPFile
 
     # Open file and read in all lines (finding any Done and Cancelled headers)
     # NB: needs the encoding line when run from launchctl, otherwise you get US-ASCII invalid byte errors (basically the 'locale' settings are different)
-    f = File.open(@filename, 'r', encoding: 'utf-8')
-    f.each_line do |line|
-      @lines[n] = line
-      @done_header = n  if line =~ /^## Done$/
-      @cancelled_header = n if line =~ /^## Cancelled$/
-      n += 1
+    begin
+      f = File.open(@filename, 'r', encoding: 'utf-8')
+      f.each_line do |line|
+        @lines[n] = line
+        @done_header = n  if line =~ /^## Done$/
+        @cancelled_header = n if line =~ /^## Cancelled$/
+        n += 1
+      end
+      f.close
+    rescue StandardError => e
+      error_message("ERROR: #{e.exception.message} when initialising note file #{this_file}")
     end
-    f.close
     @line_count = @lines.size
     # Now make a title for this file:
-    if @filename =~ /\d{8}\.(txt|md)/
+    if @filename =~ /\d{8}\.(txt|md)$/
       # for Calendar file, use the date from filename
-      @title = @filename[0..7]
+      @title = File.basename(@filename,".*") # remove path and extension suffix
       @is_calendar = true
       @is_today = @title == $date_today
     else
@@ -155,17 +126,9 @@ class NPFile
       @is_today = false
     end
 
-    log_message(" Init NPFile #{@id} from #{this_file}") if $verbose
+    $npfile_count += 1
+    log_message("Initialised NPFile #{@id} from #{this_file}") if $verbose
   end
-
-  # def self.new2(*args)
-  #   # TODO: Use NotePlan's addNote via x-callback-url instead?
-  #   # This is a second initializer, to create a new empty file, so have to use a different syntax.
-  #   # Create empty NPFile object, and then pass to detailed initializer
-  #   object = allocate
-  #   object.create_new_empty_file(*args)
-  #   object # implicit return
-  # end
 
   def append_new_line(new_line)
     # Append 'new_line' into position
@@ -196,7 +159,7 @@ class NPFile
 
     @is_updated = true
     @line_count = @lines.size
-    log_message(" - removed #{cleaned} empty lines") if $verbose
+    log_message("  - removed #{cleaned} empty tasks/headers") if $verbose
   end
 
   def remove_unwanted_dates
@@ -215,7 +178,10 @@ class NPFile
       end
       n += 1
     end
-    log_message(" - removed #{cleaned} dates") if $verbose
+    return unless cleaned.positive?
+
+    @is_updated = true
+    log_message("  - removed #{cleaned} dates") if $verbose
   end
 
   def remove_unwanted_tags
@@ -236,7 +202,10 @@ class NPFile
       end
       n += 1
     end
-    log_message(" - removed #{cleaned} tags") if $verbose
+    return unless cleaned.positive?
+
+    @is_updated = true
+    log_message("  - removed #{cleaned} tags") if $verbose
   end
 
   def remove_scheduled
@@ -257,7 +226,7 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
-    log_message(" - removed #{cleaned} scheduled") if $verbose
+    log_message("  - removed #{cleaned} scheduled") if $verbose
   end
 
   def insert_new_line(new_line, line_number)
@@ -293,6 +262,8 @@ class NPFile
       end
       n += 1
     end
+    return unless cleaned.positive?
+    log_message("  - removed #{cleaned} done times") if $verbose
   end
 
   def remove_empty_header_sections
@@ -313,7 +284,7 @@ class NPFile
         # if later header is same or higher level (fewer #s) as this,
         # then we can delete this line
         if later_header_level == this_header_level || at_eof == 1
-          log_message("  - Removing empty header line #{n} '#{line.chomp}'") if $verbose
+          # log_message("   - Removing empty header line #{n} '#{line.chomp}'") if $verbose
           @lines.delete_at(n)
           cleaned += 1
           @line_count -= 1
@@ -330,7 +301,7 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
-    log_message(" - removed #{cleaned} lines of empty section(s)") if $verbose
+    log_message("  - removed #{cleaned} lines of empty section(s)") if $verbose
   end
 
   def remove_multiple_empty_lines
@@ -352,18 +323,14 @@ class NPFile
 
     @is_updated = true
     @line_count = @lines.size
-    log_message(" - removed #{cleaned} empty lines") if $verbose
+    log_message("  - removed #{cleaned} empty lines") if $verbose
   end
 
   def rewrite_file
     # write out this update file
-    log_message(" -> writing updated version of #{@filename.to_s}")
+    log_message("  -> writing updated version of #{@filename.to_s}")
     # open file and write all the lines out
-    filepath = if @is_calendar
-                 "#{NP_CALENDAR_DIR}/#{@filename}"
-               else
-                 "#{NP_NOTES_DIR}/#{@filename}"
-               end
+    filepath = @filename
     begin
       File.open(filepath, 'w') do |f|
         @lines.each do |line|
@@ -422,17 +389,14 @@ elsif ARGV.first == '-a'
   # Tidy all files changed in last 'hours_to_process' hours
   # Read metadata for all Note files, and find those altered in the last 'hours_to_process' hours
   begin
-    # FIXME: make fake dailies test data
     Dir.chdir(NP_NOTES_DIR)
     Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
-      log_message("  - found #{this_file}") if $verbose
+      # log_message("  - found #{this_file}") if $verbose
       # ignore if this file not changed in the last 'hours_to_process' hours
-      modified_time = File.exist?(filename) ? File.mtime(this_file) : 0
+      modified_time = File.exist?(this_file) ? File.mtime(this_file) : 0
       next unless modified_time > (time_now - $options[:hours_to_process] * 60 * 60)
       # ignore if this file is empty
       next if File.zero?(this_file)
-      # ignore if this file matches 'ignore_file_regex'
-      !$options[:ignore_file_regex].empty? && this_file =~ /$options[:ignore_file_regex]/
       # OK, we want to read in this file
       $notes << NPFile.new(this_file)
     end
@@ -444,7 +408,7 @@ elsif ARGV.first == '-a'
   begin
     Dir.chdir(NP_CALENDAR_DIR)
     Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
-      log_message("    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}") if $verbose
+      # log_message("    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}") if $verbose
       # ignore if this file is empty
       next if File.zero?(this_file)
       # ignore if modified time (mtime) not in the last 'hours_to_process' hours
@@ -456,20 +420,20 @@ elsif ARGV.first == '-a'
   rescue StandardError => e
     error_message("ERROR: #{e.exception.message} when finding recently changed files")
   end
-  # TODO: unless we're been asked to ignore it
 
 elsif ARGV.first == '-n'
-  Dir.chdir(NP_NOTES_DIR)
+  Dir.chdir(BASE_DATA_DIR)
   # we want to tidy the given single file, passed in ARGV[1]
   this_file = ARGV[1].nil? ? '' : ARGV[1]
-  # unless it doesn't exist
+  # have we been asked to ignore this file?
+  if !$options[:ignore_file_regex].empty? && this_file =~ /$options[:ignore_file_regex]/
+    log_message("Ignoring '#{this_file} as it matches 'ignore_file_regex'.")
+    exit
+  end
+  # error if file doesn't exist
   if !File.exist?(this_file)
     error_message("File '#{this_file}' doesn't exist. Exiting.")
     exit
-  end
-  # or we're been asked to ignore it
-  if !$options[:ignore_file_regex].empty? && this_file =~ /$options[:ignore_file_regex]/
-    log_message("Ignoring '#{this_file} as it matches 'ignore_file_regex'.")
   end
   # or the note is empty
   if File.zero?(this_file)
@@ -482,62 +446,21 @@ else
   exit
 end
 
-# Start by reading all Notes files in
-# (This is needed to have a list of all note titles that we might be moving tasks to.)
-# begin
-#   Dir.chdir(NP_NOTES_DIR)
-#   Dir.glob(['{[!@]**/*,*}.txt', '{[!@]**/*,*}.md']).each do |this_file|
-#     next if File.zero?(this_file) # ignore if this file is empty
-#
-#     $allNotes << NPFile.new(this_file)
-#   end
-# rescue StandardError => e
-#   puts "ERROR: #{e.exception.message} when reading in all notes files".colorize(WarningColour)
-# end
-# puts "Read in all Note files: #{$npfile_count} found\n" if $verbose > 0
-
-# if ARGV.count.positive?
-#  # We have a file pattern given, so find that (starting in the notes directory), and use it
-#  puts "Starting npTools at #{time_now_fmttd} for files matching pattern(s) #{ARGV}." unless $quiet
-#  begin
-#    ARGV.each do |pattern|
-#      # if pattern has a '.' in it assume it is a full filename ...
-#      # ... otherwise treat as close to a regex term as possible with Dir.glob
-  #     glob_pattern = pattern =~ /\./ ? pattern : '[!@]**/*' + pattern + '*.{md,txt}'
-  #     puts "  Looking for note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
-  #     Dir.glob(glob_pattern).each do |this_file|
-  #       puts "  - #{this_file}" if $verbose > 0
-  #       # Note has already been read in; so now just find which one to point to, by matching filename
-  #       $allNotes.each do |this_note|
-  #         # copy the $allNotes item into $notes array
-  #         $notes << this_note if this_note.filename == this_file
-  #       end
-  #     end
-
-  #     # Now look for matches in Daily/Calendar files
-  #     Dir.chdir(NP_CALENDAR_DIR)
-  #     # if pattern has a '.' in it assume it is a full filename ...
-  #     # ... otherwise treat as close to a regex term as possible with Dir.glob
-  #     glob_pattern = pattern =~ /\./ ? pattern : '*' + pattern + '*.{md,txt}'
-  #     puts "  Looking for daily note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
-  #     Dir.glob(glob_pattern).each do |this_file|
-  #       puts "  - #{this_file}" if $verbose > 0
-  #       $notes << NPFile.new(this_file) if !File.zero?(this_file) # read in file unless this file is empty
-  #     end
-  #   end
-  # rescue StandardError => e
-  #   puts "ERROR: #{e.exception.message} when reading in files matching pattern #{pattern}".colorize(WarningColour)
-  # end
-
-
 #--------------------------------------------------------------------------------------
 if $notes.count.positive? # if we have some files to work on ...
   c = 0
-  log_message("Processing #{$notes.count} files:") if $verbose
-  $notes.sort! { |a, b| a.title <=> b.title }
+  ignore_file_regex = $options[:ignore_file_regex]
+  log_message("Processing #{$notes.count} files ...") if $verbose
+  # $notes.sort! { |a, b| a.title <=> b.title }
   $notes.each do |note|
+    # ignore if this file matches 'ignore_file_regex'
+    if !ignore_file_regex.empty? && note.filename =~ /#{ignore_file_regex}/
+      log_message("  Ignoring '#{note.filename}' as it matches 'ignore_file_regex' option")
+      next
+    end
+
     # For each NP file to process, do the following
-    log_message(" Processing file id #{note.id}: #{note.title.to_s}") if $verbose
+    log_message("  Processing file id #{note.id}: #{note.title.to_s}") if $verbose
     note.clear_empty_tasks_or_headers
     note.remove_empty_header_sections
     note.remove_unwanted_dates
@@ -549,7 +472,7 @@ if $notes.count.positive? # if we have some files to work on ...
     note.rewrite_file if note.is_updated && !read_only
     c += 1
   end
-  log_message("Processed #{c} note(s). Stopping.")
+  log_message("Processed #{c} note(s). Stopping.") if $verbose
 else
   log_message("No matching files found to tidy.")
 end

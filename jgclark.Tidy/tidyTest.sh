@@ -13,8 +13,8 @@ PLUGIN_DIR=/Users/jonathan/GitHub/NotePlan-Plugins/jgclark.Tidy
 cd $PLUGIN_DIR
 
 # Then create the test data in those locations, as needed
-# cp test_notes/*.* $NOTES_DIR
-# cp test_dailies/*.* $CALENDAR_DIR
+cp test_notes/*.* $NOTES_DIR
+cp test_calendar/*.* $CALENDAR_DIR
 
 # Test 1: should fail with no arguments
 npTidy
@@ -25,16 +25,25 @@ npTidy -n
 # PASSED
 
 # Test 3: should fail to find a single note file
-npTidy -n "ZZZZ.XXX"
+npTidy -n "Notes/ZZZZ.XXX"
 # PASSED
 
 # Test 4: should find a single note file in the top level of Notes/
-npTidy -n "standard.md"
+npTidy -n "Notes/standard.md"
 # PASSED
 
-# Test 5: should find a single note file in the TEST folder of Notes/
-npTidy -n "TEST/TEST various.md"
-exit  # TESTED UP TO HERE <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+# Test 5: should find a single note file with quotes in title
+npTidy -n "Notes/TEST/TEST \"title in quotes\".md"
+# PASSED
 
-# Test 5: should find a single calendar file
-npTidy -n "20210123.md"
+# Test 6: should find a single note file in the TEST folder of Notes/
+npTidy -n "Notes/TEST/TEST various.md"
+# PASSED
+
+# Test 7: should find a single calendar file
+npTidy -n "Calendar/20211201.md"
+# PASSED
+
+# Test 8: operate over all files changed in last 'hours_to_process' hours
+npTidy -a
+# PASSED
