@@ -9,6 +9,7 @@ When invoked for a note it **tidies up** data files, by:
 5. removing header lines without any content before the next header line of the same or higher level (i.e. fewer `#`s)
 6. removing any multiple consecutive blank lines.
 
+**NB**: NotePlan has several options in the Markdown settings for how to mark a task, including `-`, `- [ ]', `*` and `* [ ]`. All are supported by this script.
 
 ## Installation
 Eventually to be handled by NotePlan.
@@ -26,15 +27,16 @@ Also note that for development purposes, there are variables at the top of the s
 Use the `tidyTest.sh` script -- see comments embedded in it to set up some test data in some suitable place, or point it to the real NP3 data. It calls a series of commands to test out the plugin -- but the output has to be manually checked, until I work out how to automate this.
 
 ## Running the Plugin
-To invoke the **tidy** command on the current note, by calling
+To invoke the **tidy** command on a particular note, pass the filename in double quotes:
 
-`npTidy -n `
+`npTidy -n "filename"`
+
+NB: the filename needs to include the **relative path from the NotePlan base data directory**. E.g. `Notes/a note.md`, `Notes/Folder/note name.txt` or `Calendar/20210220.md`.
+NB: if the filename itself contains double quote marks, they will need to be escaped by prefixing with a single backslash.
 
 To invoke the **tidy** command on all files changed in the last `hours_to_process` hours, call
 
 `npTidy -a`
-
-**NB**: NotePlan has several options in the Markdown settings for how to mark a task, including `-`, `- [ ]', `*` and `* [ ]`. All are supported by this script.
 
 ## Future things to think about
 - check > and < date moving

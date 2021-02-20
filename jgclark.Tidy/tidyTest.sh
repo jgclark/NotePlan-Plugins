@@ -1,8 +1,12 @@
 #!/bin/zsh
 
 # Script to test jgclark.npTidy plugin for NotePlan
-# i.e. this is a stub for NotePlan, while it doesn't yet have plugin functionality
-# JGC, 13.2.2021
+# -- i.e. this is a stub for NotePlan
+# JGC, 20.2.2021
+
+# Remember:
+# - the filename needs to include the **relative path from the NotePlan base data directory**. E.g. `Notes/a note.md`, `Notes/Folder/note name.txt` or `Calendar/20210220.md`.
+# - if the filename itself contains double quote marks, they will need to be escaped by prefixing with a single backslash.
 
 # Set environment variables to a separate test location
 CALENDAR_DIR=/tmp/Calendar
