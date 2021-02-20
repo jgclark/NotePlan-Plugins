@@ -1,35 +1,33 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tidy Plugin
-# by Jonathan Clark, v0.1.0, 11.2.2021
+# by Jonathan Clark, v0.1.2, 20.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-Tidy/
 #-------------------------------------------------------------------------------
-VERSION = "0.1.0"
+VERSION = "0.1.2"
 
 require 'date'
 require 'time'
 require 'cgi'
 require 'json'
+require 'csv'
 
 #-------------------------------------------------------------------------------
 # Setting variables to tweak ... TODO: reduce number here to about zero
 #-------------------------------------------------------------------------------
 $verbose = true
-read_only = true  # for testing, stop any actual re-writing of notes
+read_only = false  # for testing, stop any actual re-writing of notes
 
 #-------------------------------------------------------------------------------
 # TODO: look these up from the environment, when NP supports this
 #-------------------------------------------------------------------------------
 # BASE_DATA_DIR = "#{ENV['HOME']}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3"
-BASE_DATA_DIR = '/tmp'
 PLUGIN_DIR = '/Users/jonathan/GitHub/NotePlan-Plugins/jgclark.Tidy'
+BASE_DATA_DIR = '/tmp'
 NP_NOTES_DIR = "#{BASE_DATA_DIR}/Notes".freeze
 NP_CALENDAR_DIR = "#{BASE_DATA_DIR}/Calendar".freeze
-# puts BASE_DATA_DIR
-# puts NP_NOTES_DIR
-# puts NP_CALENDAR_DIR
 
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
@@ -49,6 +47,8 @@ $date_today = time_now.strftime(DATE_TODAY_FORMAT)
 # $allNotes = []  # to hold all note objects
 $notes    = []  # to hold all relevant note objects
 $npfile_count = -1 # number of NPFile objects created so far (incremented before first use)
+$options = {} # to hold settings/options
+$tags_to_remove = []
 
 #-------------------------------------------------------------------------
 # Helper definitions
@@ -155,7 +155,7 @@ class NPFile
       @is_today = false
     end
 
-    puts " Init NPFile #{@id} from #{this_file}" if $verbose
+    log_message(" Init NPFile #{@id} from #{this_file}") if $verbose
   end
 
   # def self.new2(*args)
@@ -166,6 +166,14 @@ class NPFile
   #   object.create_new_empty_file(*args)
   #   object # implicit return
   # end
+
+  def append_new_line(new_line)
+    # Append 'new_line' into position
+    # TODO: should ideally split on '\n' and add each potential line separately
+    log_message('  append_new_line ...') if $verbose
+    @lines << new_line
+    @line_count = @lines.size
+  end
 
   def clear_empty_tasks_or_headers
     # Clean up lines with just * or - or #s in them
@@ -188,41 +196,53 @@ class NPFile
 
     @is_updated = true
     @line_count = @lines.size
-    puts "  - removed #{cleaned} empty lines" if $verbose
+    log_message(" - removed #{cleaned} empty lines") if $verbose
   end
 
-  def remove_unwanted_tags_dates
-    # removes specific tags and >dates from complete or cancelled tasks
-    # puts '  remove_unwanted_tags_dates ...' if $verbose
-    n = cleaned = 0
+  def remove_unwanted_dates
+    # removes <dates from complete or cancelled tasks
+    # log_message('  remove_unwanted_dates ...') if $verbose
+    n = 0
+    cleaned = 0
     while n < @line_count
       # only do something if this is a completed or cancelled task
       if @lines[n] =~ /\[(x|-)\]/
         # remove any <YYYY-MM-DD on completed or cancelled tasks
-        if options[:remove_scheduled] == 1
-          if (@lines[n] =~ /\s<\d{4}\-\d{2}\-\d{2}/)
-            @lines[n].gsub!(/\s<\d{4}\-\d{2}\-\d{2}/, '')
-            cleaned += 1
-          end
+        if (@lines[n] =~ /\s<\d{4}-\d{2}-\d{2}/)
+          @lines[n].gsub!(/\s<\d{4}-\d{2}-\d{2}/, '')
+          cleaned += 1
         end
+      end
+      n += 1
+    end
+    log_message(" - removed #{cleaned} dates") if $verbose
+  end
 
+  def remove_unwanted_tags
+    # removes specific tags from complete or cancelled tasks
+    # log_message('  remove_unwanted_tags ...') if $verbose
+    n = 0
+    cleaned = 0
+    while n < @line_count
+      # only do something if this is a completed or cancelled task
+      if @lines[n] =~ /\[(x|-)\]/
         # Remove any tags from the TagsToRemove list. Iterate over that array:
-        options[:tags_to_remove].each do |tag|
-          if (@lines[n] =~ /#{tag}/)
-            @lines[n].gsub!(/ #{tag}/, '')
+        $tags_to_remove.each do |tag|
+          if (@lines[n] =~ /#{tag}[\s$]/) # look for whitespace or end of line after it as well
+            @lines[n].gsub!(/#{tag}\s?/, '')
             cleaned += 1
           end
         end
       end
       n += 1
     end
-    puts "  - removed #{cleaned} tags" if $verbose
+    log_message(" - removed #{cleaned} tags") if $verbose
   end
 
   def remove_scheduled
     # remove [>] tasks from calendar notes, as there will be a duplicate
     # (whether or not the 'Append links when scheduling' option is set or not)
-    # puts '  remove_scheduled ...' if $verbose
+    # log_message('  remove_scheduled ...') if $verbose
     n = cleaned = 0
     while n < @line_count
       # Empty any [>] todo lines
@@ -237,12 +257,12 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
-    puts "  - removed #{cleaned} scheduled" if $verbose
+    log_message(" - removed #{cleaned} scheduled") if $verbose
   end
 
   def insert_new_line(new_line, line_number)
     # Insert 'line' into position 'line_number'
-    # puts '  insert_new_line ...' if $verbose > 1
+    # log_message('  insert_new_line ...') if $verbose > 1
     n = @line_count # start iterating from the end of the array
     while n >= line_number
       @lines[n + 1] = @lines[n]
@@ -263,10 +283,10 @@ class NPFile
       completed_date = ''
       # find lines with date-time to shorten, and capture date part of it
       # i.e. @done(YYYY-MM-DD HH:MM[AM|PM])
-      if line =~ /@done\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/
+      if line =~ /@done\(\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/
         # get completed date
-        line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}(?:.(?:AM|PM))?\)/) { |m| completed_date = m.join }
-        updated_line = line.gsub(/\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/, "(#{completed_date})")
+        line.scan(/\((\d{4}-\d{2}-\d{2}) \d{2}:\d{2}(?:.(?:AM|PM))?\)/) { |m| completed_date = m.join }
+        updated_line = line.gsub(/\(\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/, "(#{completed_date})")
         @lines[n] = updated_line
         cleaned += 1
         @is_updated = true
@@ -277,7 +297,7 @@ class NPFile
 
   def remove_empty_header_sections
     # go backwards through the active part of the note, deleting any sections without content
-    # puts '  remove_empty_header_sections ...' if $verbose
+    # log_message('  remove_empty_header_sections ...') if $verbose
     cleaned = 0
     n = @done_header != 0 ? @done_header - 1 : @line_count - 1
 
@@ -289,11 +309,11 @@ class NPFile
       if line =~ /^#+\s\w/
         # this is a markdown header line; work out what level it is
         line.scan(/^(#+)\s/) { |m| this_header_level = m[0].length }
-        # puts "    - #{later_header_level} / #{this_header_level}" if $verbose
+        # log_message("    - #{later_header_level} / #{this_header_level}") if $verbose
         # if later header is same or higher level (fewer #s) as this,
         # then we can delete this line
         if later_header_level == this_header_level || at_eof == 1
-          puts "    - Removing empty header line #{n} '#{line.chomp}'" if $verbose
+          log_message("  - Removing empty header line #{n} '#{line.chomp}'") if $verbose
           @lines.delete_at(n)
           cleaned += 1
           @line_count -= 1
@@ -310,13 +330,12 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
-    # @line_count = @lines.size
-    puts "  - removed #{cleaned} lines of empty section(s)" if $verbose
+    log_message(" - removed #{cleaned} lines of empty section(s)") if $verbose
   end
 
   def remove_multiple_empty_lines
     # go backwards through the active parts of the note, deleting any blanks at the end
-    # puts '  remove_multiple_empty_lines ...' if $verbose
+    # log_message('  remove_multiple_empty_lines ...') if $verbose
     cleaned = 0
     n = (@done_header != 0 ? @done_header - 1 : @line_count - 1)
     last_was_empty = false
@@ -333,12 +352,12 @@ class NPFile
 
     @is_updated = true
     @line_count = @lines.size
-    puts "  - removed #{cleaned} empty lines" if $verbose
+    log_message(" - removed #{cleaned} empty lines") if $verbose
   end
 
   def rewrite_file
     # write out this update file
-    puts '  > writing updated version of ' + @filename.to_s.bold unless $quiet
+    log_message(" -> writing updated version of #{@filename.to_s}")
     # open file and write all the lines out
     filepath = if @is_calendar
                  "#{NP_CALENDAR_DIR}/#{@filename}"
@@ -352,7 +371,7 @@ class NPFile
         end
       end
     rescue StandardError => e
-      puts "ERROR: #{e.exception.message} when re-writing note file #{filepath}".colorize(WarningColour)
+      error_message("ERROR: #{e.exception.message} when re-writing note file #{filepath}")
     end
   end
 end
@@ -366,7 +385,6 @@ log_message("Starting npTidy v#{VERSION} for user #{USERNAME} at #{time_now_fmtt
 #--------------------------------------------------------------------------------------
 # Setup program options, by reading from current 'config.json' file in this directory
 # Read JSON settings from a file
-options = {}
 begin
   f = File.open(JSON_SETTINGS_FILE)
   json = f.read
@@ -377,13 +395,18 @@ rescue StandardError => e
 end
 begin
   parsed = JSON.parse(json) # returns a hash
-  # puts parsed if $verbose
-  options[:hours_to_process] = !parsed['hours_to_process'].nil? ? parsed['hours_to_process'].to_i : 8
-  options[:ignore_file_regex] = !parsed['ignore_file_regex'].nil? ? parsed['ignore_file_regex'] : ''
-  options[:ignore_today] = !parsed['ignore_today'].nil? ? parsed['ignore_today'] : false
-  options[:remove_scheduled] = !parsed['remove_scheduled'].nil? ? parsed['remove_scheduled'] : true
-  options[:tags_to_remove] = !parsed['tags_to_remove'].nil? ? parsed['tags_to_remove'] : "'#waiting', '#high', '#started', '#⭐'"
-  # puts "Options: #{options.to_s}" if $verbose
+  $options[:hours_to_process] = !parsed['hours_to_process'].nil? ? parsed['hours_to_process'].to_i : 8
+  $options[:ignore_file_regex] = !parsed['ignore_file_regex'].nil? ? parsed['ignore_file_regex'] : ''
+  $options[:ignore_today] = !parsed['ignore_today'].nil? ? parsed['ignore_today'] : false
+  $options[:remove_scheduled] = !parsed['remove_scheduled'].nil? ? parsed['remove_scheduled'] : true
+  $options[:tags_to_remove] = !parsed['tags_to_remove'].nil? ? parsed['tags_to_remove'] : nil
+  if !$options[:tags_to_remove].nil?
+    $temp = CSV.parse($options[:tags_to_remove])
+    $temp[0].each do |tag| # items are all under array item [0] for some reason
+      $tags_to_remove << tag.strip
+    end
+  end
+  # log_message("Options: #{$options.to_s}") if $verbose
 rescue JSON::ParserError => e
   error_message("Hit #{e.exception.message} when parsing JSON settings file.")
   exit
@@ -402,14 +425,14 @@ elsif ARGV.first == '-a'
     # FIXME: make fake dailies test data
     Dir.chdir(NP_NOTES_DIR)
     Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
-      puts "  - found #{this_file}" if $verbose
+      log_message("  - found #{this_file}") if $verbose
       # ignore if this file not changed in the last 'hours_to_process' hours
       modified_time = File.exist?(filename) ? File.mtime(this_file) : 0
-      next unless modified_time > (time_now - options[:hours_to_process] * 60 * 60)
+      next unless modified_time > (time_now - $options[:hours_to_process] * 60 * 60)
       # ignore if this file is empty
       next if File.zero?(this_file)
       # ignore if this file matches 'ignore_file_regex'
-      !options[:ignore_file_regex].empty? && this_file =~ /options[:ignore_file_regex]/
+      !$options[:ignore_file_regex].empty? && this_file =~ /$options[:ignore_file_regex]/
       # OK, we want to read in this file
       $notes << NPFile.new(this_file)
     end
@@ -421,21 +444,22 @@ elsif ARGV.first == '-a'
   begin
     Dir.chdir(NP_CALENDAR_DIR)
     Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
-      puts "    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}" if $verbose
+      log_message("    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}") if $verbose
       # ignore if this file is empty
       next if File.zero?(this_file)
       # ignore if modified time (mtime) not in the last 'hours_to_process' hours
-      next unless File.mtime(this_file) > (time_now - options[:hours_to_process] * 60 * 60)
+      next unless File.mtime(this_file) > (time_now - $options[:hours_to_process] * 60 * 60)
 
       # read the calendar file in
       $notes << NPFile.new(this_file)
     end
   rescue StandardError => e
-    puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
+    error_message("ERROR: #{e.exception.message} when finding recently changed files")
   end
   # TODO: unless we're been asked to ignore it
 
 elsif ARGV.first == '-n'
+  Dir.chdir(NP_NOTES_DIR)
   # we want to tidy the given single file, passed in ARGV[1]
   this_file = ARGV[1].nil? ? '' : ARGV[1]
   # unless it doesn't exist
@@ -444,7 +468,7 @@ elsif ARGV.first == '-n'
     exit
   end
   # or we're been asked to ignore it
-  if !options[:ignore_file_regex].empty? && this_file =~ /options[:ignore_file_regex]/
+  if !$options[:ignore_file_regex].empty? && this_file =~ /$options[:ignore_file_regex]/
     log_message("Ignoring '#{this_file} as it matches 'ignore_file_regex'.")
   end
   # or the note is empty
@@ -509,16 +533,17 @@ end
 #--------------------------------------------------------------------------------------
 if $notes.count.positive? # if we have some files to work on ...
   c = 0
-  puts "\nProcessing #{$notes.count} files:" if $verbose
+  log_message("Processing #{$notes.count} files:") if $verbose
   $notes.sort! { |a, b| a.title <=> b.title }
   $notes.each do |note|
     # For each NP file to process, do the following
-    puts " Processing file id #{note.id}: #{note.title.to_s}" if $verbose
+    log_message(" Processing file id #{note.id}: #{note.title.to_s}") if $verbose
     note.clear_empty_tasks_or_headers
     note.remove_empty_header_sections
-    note.remove_unwanted_tags_dates
-    note.remove_scheduled if note.is_calendar
-    note.remove_done_times   # simpler form of note.process_repeats_and_done
+    note.remove_unwanted_dates
+    note.remove_unwanted_tags
+    note.remove_scheduled if note.is_calendar && $options[:remove_scheduled]
+    note.remove_done_times
     note.remove_multiple_empty_lines
     # If there have been changes, write out the file
     note.rewrite_file if note.is_updated && !read_only

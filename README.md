@@ -34,6 +34,18 @@ The plugin is configured in this JSON file, which shouldn't change (for any give
   "plugin.author": "Jonathan Clark", // author name
   "plugin.url": "tbd", // link to repository for the plugin
   "plugin.version": "0.0.1", // x.y.z plugin version
+  "plugin.dependencies": [ // optional list of dependencies, and automated tests
+    {
+      "description": "Ruby interpreter", // human-readable desceription of the dependency
+      "min_version": "2.4.0", // (optional) human-readable minimum version string
+      "test_command": "ruby --version" // (optional) command to run on installation; if it returns true then the dependency is met; if not then warn user and disable.
+    },
+    {
+      "description": "Ruby gem 'json'",
+      "min_version": "2.0.0",
+      "test_command": "gem spec json --local --version '>=2'"  // cool command to do a specific ruby gem test :-)
+    }
+  ],
   "plugin.commands": [ // array of commands; minimum 1
     {
       "name": "tidy", // short name to use in the command bar
@@ -104,4 +116,12 @@ Further lines of output are captured by NotePlan and used to insert at the curre
 
 ## Future Work 
 1. (**priority**) need way for plugin to access a list of some/all note titles without having to read in all files
-2. how to trigger UI elements or dialogs in NotePlan itself?
+2. installation issues (below)
+3. how to trigger UI elements or dialogs in NotePlan itself?
+
+## Installing
+I think we need a mechanism to enable/disable plugins (common practice in other extensible systems).  Not least because I can easily foresee the case that a less experienced user tries a plugin that requires script language X version Y, but doesn't have it on their Mac. (Particularly as I think I read that Apple have said they're going to stop shipping some language engines in macOS.)  So I think (in time, anyway) we need a way to test whether language X version Y is installed, to warn the user, and to disable it if it isn't.
+
+Perhaps well as some sort of array of dependencies, we could say either:
+1. each needs a one-line script that the author specifies to test whether the dependency is met or not. If the command executes OK then dependency is passed. If not, an error is generated.
+2. a special command line option is passed to the script 

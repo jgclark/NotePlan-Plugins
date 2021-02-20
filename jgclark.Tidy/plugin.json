@@ -1,5 +1,5 @@
 {
-  "noteplan.minAppVersion": "3.0.0",
+  "noteplan.min_version": "3.0.0",
   "plugin.id": "jgclark.Tidy",
   "plugin.name": "Tidy up NotePlan notes",
   "plugin.description": "Delete multiple blank lines, empty todos and bullets, etc.",
@@ -7,6 +7,18 @@
   "plugin.author": "Jonathan Clark",
   "plugin.url": "tbd",
   "plugin.version": "0.0.1",
+  "plugin.dependencies": [
+    {
+      "description": "Ruby interpreter",
+      "min_version": "2.4.0",
+      "test_command": "ruby --version"
+    },
+    {
+      "description": "Ruby gem 'json'",
+      "min_version": "2.4.0",
+      "test_command": "gem spec json --local --version '>=2'"
+    }
+  ],
   "plugin.commands": [
     {
       "name": "tidy",
@@ -49,9 +61,9 @@
     },
     {
       "name": "tags_to_remove",
-      "description": "Tags to remove from completed tasks",
+      "description": "Comma-separated list of Tags to remove from completed tasks",
       "type": "string",
-      "default": "'#waiting', '#high', '#started', '#⭐'"
+      "default": "#waiting, #high, #started, #⭐"
     }
   ]
 }

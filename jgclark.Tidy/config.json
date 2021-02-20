@@ -3,5 +3,5 @@
   "ignore_file_regex": ".+_copy.md",
   "ignore_today": "false",
   "remove_scheduled": "true",
-  "tags_to_remove": "'#waiting', '#high', '#started', '#⭐'"
+  "tags_to_remove": "#waiting, #high, #started, #⭐"
 }
